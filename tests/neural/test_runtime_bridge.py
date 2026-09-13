@@ -35,18 +35,20 @@ def test_bridge_observes_tool_and_error_as_advisory_events():
     runtime.bus.subscribe("error.observed", received.append)
     bridge = NeuralRuntimeBridge(runtime)
 
-    bridge.observe_tool(
+    terminal = bridge.observe_tool(
         "terminal",
         {"command": "pwd"},
         "{\"output\": \"/workspace\"}",
         duration_ms=12,
         correlation_id="turn-2",
     )
-    bridge.observe_error("RuntimeError", "boom", correlation_id="turn-2")
+    error = bridge.observe_error("RuntimeError", "boom", correlation_id="turn-2")
 
     assert received[0].payload["tool_name"] == "terminal"
     assert received[0].payload["duration_ms"] == 12
     assert received[1].payload == {"error_type": "RuntimeError", "message": "boom"}
+    assert terminal is received[0]
+    assert error is received[1]
 
 
 def test_bridge_environment_snapshot_contains_no_environment_values():
@@ -84,13 +86,12 @@ def test_runtime_bridge_context_is_scoped_and_resettable():
 
 
 def test_bridge_never_executes_tools(monkeypatch: pytest.MonkeyPatch):
-    runtime = NeuralRuntime()
-    bridge = NeuralRuntimeBridge(runtime)
+    bridge = NeuralRuntimeBridge()
 
     def fail(*_args, **_kwargs):
         raise AssertionError("neural bridge must not execute tools")
 
-    monkeypatch.setattr(runtime, "process", fail)
+    monkeypatch.setattr(NeuralRuntime, "process", fail)
     event = bridge.observe_conversation("hello")
 
     assert event.event_type == "conversation.observed"
