@@ -1,3 +1,5 @@
 """WIDDX's event-driven artificial nervous system foundation."""
 
-__all__ = ["events"]
+from .runtime import NeuralRuntime
+
+__all__ = ["NeuralRuntime"]
