@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import platform as platform_module
 import threading
 from typing import Any, Mapping
 
@@ -42,10 +44,10 @@ def observe_lifecycle(hook_name: str, **kwargs: Any) -> None:
     if hook_name == "on_session_start":
         bridge = _bridge(session_id)
         bridge.observe_environment(
-            cwd=str(kwargs.get("cwd") or ""),
-            platform=str(kwargs.get("platform") or ""),
-            python_version=str(kwargs.get("python_version") or ""),
-            environment_keys=list(kwargs.get("environment_keys") or []),
+            cwd=str(kwargs.get("cwd") or os.getcwd()),
+            platform=str(kwargs.get("platform") or platform_module.system().lower()),
+            python_version=str(kwargs.get("python_version") or platform_module.python_version()),
+            environment_keys=list(kwargs.get("environment_keys") or os.environ.keys()),
             correlation_id=str(kwargs.get("turn_id") or "") or None,
         )
         return
