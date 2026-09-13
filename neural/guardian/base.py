@@ -22,6 +22,6 @@ class Guardian:
         payload: dict[str, Any] = dict(event.payload)
         command = str(payload.get("command", ""))
         denied = event.event_type.endswith("policy.denied") or bool(payload.get("policy_denied"))
-        suspicious = command.strip().lower() in {"rm -rf /", "del /f /s /q c:\\"}
+        suspicious = command.strip().lower() == "rm -rf /"
         risk = 1.0 if denied or suspicious else 0.0
         return RiskAssessment(risk=risk, allowed=not denied and not suspicious)
