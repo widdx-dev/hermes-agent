@@ -24,6 +24,14 @@ def test_lifecycle_observer_forwards_events_to_neural_runtime(monkeypatch):
     }
 
 
+def test_neural_observer_advertises_its_supported_hooks():
+    assert neural.handles_hook("on_session_start")
+    assert neural.handles_hook("pre_llm_call")
+    assert neural.handles_hook("post_tool_call")
+    assert neural.handles_hook("on_session_end")
+    assert not neural.handles_hook("post_llm_call")
+
+
 def test_neural_observer_maps_core_lifecycle_events(monkeypatch):
     calls = []
 
