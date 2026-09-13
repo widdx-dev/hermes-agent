@@ -25,6 +25,6 @@ def observe_lifecycle(hook_name: str, **kwargs: Any) -> None:
 
 def handles_hook(hook_name: str) -> bool:
     """Return whether any built-in observability feature handles a hook."""
-    from . import relay_shared_metrics
+    from . import neural, relay_shared_metrics
 
-    return relay_shared_metrics.handles_hook(hook_name)
+    return relay_shared_metrics.handles_hook(hook_name) or neural.handles_hook(hook_name)
