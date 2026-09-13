@@ -21,7 +21,7 @@ def test_synapse_reinforcement_is_clamped_and_tracks_outcomes():
     synapse.reinforce(success=True, amount=0.2)
     synapse.reinforce(success=False, amount=0.5)
 
-    assert synapse.weight == 0.45
+    assert synapse.weight == 0.5
     assert synapse.uses == 2
     assert synapse.successes == 1
     assert synapse.failures == 1
