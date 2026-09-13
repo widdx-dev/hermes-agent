@@ -23,7 +23,7 @@ jobs:
           name: Run WIDDX neural foundation tests
           command: |
             mkdir -p test-results
-            uv run pytest tests/neural --junitxml=test-results/neural-junit.xml
+            uv run pytest tests/neural tests/hermes_cli/test_neural_observability.py --junitxml=test-results/neural-junit.xml
       - store_test_results:
           path: test-results
 
