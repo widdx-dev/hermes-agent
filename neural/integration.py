@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextvars
 from typing import Any, Mapping
 
-from neural.events import NeuralEvent
+from neural.events import NeuralEvent, NeuralSignal
 from neural.perception import ConversationCell, EnvironmentCell, ErrorCell, TaskCell, TerminalCell
 from neural.runtime import NeuralRuntime
 
@@ -13,12 +13,21 @@ from neural.runtime import NeuralRuntime
 _CURRENT_BRIDGE: contextvars.ContextVar[NeuralRuntimeBridge | None] = contextvars.ContextVar(
     "neural_runtime_bridge", default=None
 )
+_ELIGIBLE_EVENT_TYPES = frozenset(
+    {
+        "conversation.observed",
+        "task.observed",
+        "terminal.observed",
+        "error.observed",
+    }
+)
 
 
 class NeuralRuntimeBridge:
     """Translate Hermes lifecycle facts into advisory neural observations.
 
-    The bridge deliberately calls only ``NeuralRuntime.sense``. It never dispatches
+    The bridge deliberately calls only ``NeuralRuntime.sense`` while observing and
+    ``NeuralRuntime.process`` at an explicit processing boundary. It never dispatches
     tools, changes policy, invokes a model, touches credentials, or performs I/O.
     """
 
@@ -111,6 +120,27 @@ class NeuralRuntimeBridge:
             },
             correlation_id=correlation_id,
         )
+
+    def process_event(
+        self,
+        event: NeuralEvent,
+        *,
+        allow_environment: bool = False,
+    ) -> list[NeuralSignal]:
+        """Process one existing observation at an explicit advisory boundary.
+
+        The event is never re-sensed or sent back through the Hermes lifecycle. Only
+        allowlisted observation types reach the advisory processor, and processing is
+        fail-open with reinforcement disabled.
+        """
+        if event.event_type not in _ELIGIBLE_EVENT_TYPES:
+            if not (allow_environment and event.event_type == "environment.observed"):
+                return []
+        try:
+            return self.runtime.process(event, reinforce=False)
+        except Exception:
+            # Processor failures must never affect Hermes execution or approval paths.
+            return []
 
 
 def bind_runtime_bridge(bridge: NeuralRuntimeBridge) -> contextvars.Token[NeuralRuntimeBridge | None]:
