@@ -3,7 +3,7 @@ version: 2.1
 jobs:
   neural-tests:
     docker:
-      - image: cimg/python:3.13
+      - image: cimg/python:3.12
     working_directory: ~/hermes-agent
     resource_class: medium
     steps:
