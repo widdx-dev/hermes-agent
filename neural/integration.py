@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 from typing import Any, Mapping
 
+from neural.events import NeuralEvent
 from neural.perception import ConversationCell, EnvironmentCell, ErrorCell, TaskCell, TerminalCell
 from neural.runtime import NeuralRuntime
 
@@ -29,22 +30,32 @@ class NeuralRuntimeBridge:
         self.error = ErrorCell()
         self.environment = EnvironmentCell()
 
-    def _sense(self, cell: Any, payload: Mapping[str, Any], *, correlation_id: str | None = None) -> None:
+    def _sense(
+        self,
+        cell: Any,
+        payload: Mapping[str, Any],
+        *,
+        correlation_id: str | None = None,
+    ) -> NeuralEvent | None:
         try:
-            self.runtime.sense(cell, payload, correlation_id=correlation_id)
+            return self.runtime.sense(cell, payload, correlation_id=correlation_id)
         except Exception:
             # Neural observation is best-effort and must never become an agent failure path.
-            return
+            return None
 
-    def observe_conversation(self, text: str, *, correlation_id: str | None = None) -> None:
-        self._sense(
+    def observe_conversation(
+        self, text: str, *, correlation_id: str | None = None
+    ) -> NeuralEvent | None:
+        return self._sense(
             self.conversation,
             {"text": text, "length": len(text)},
             correlation_id=correlation_id,
         )
 
-    def observe_task(self, task_id: str, *, correlation_id: str | None = None) -> None:
-        self._sense(self.task, {"task_id": task_id}, correlation_id=correlation_id)
+    def observe_task(
+        self, task_id: str, *, correlation_id: str | None = None
+    ) -> NeuralEvent | None:
+        return self._sense(self.task, {"task_id": task_id}, correlation_id=correlation_id)
 
     def observe_tool(
         self,
@@ -54,10 +65,10 @@ class NeuralRuntimeBridge:
         *,
         duration_ms: int,
         correlation_id: str | None = None,
-    ) -> None:
+    ) -> NeuralEvent | None:
         if tool_name != "terminal":
-            return
-        self._sense(
+            return None
+        return self._sense(
             self.terminal,
             {
                 "tool_name": tool_name,
@@ -74,8 +85,8 @@ class NeuralRuntimeBridge:
         message: str,
         *,
         correlation_id: str | None = None,
-    ) -> None:
-        self._sense(
+    ) -> NeuralEvent | None:
+        return self._sense(
             self.error,
             {"error_type": error_type, "message": message},
             correlation_id=correlation_id,
@@ -89,8 +100,8 @@ class NeuralRuntimeBridge:
         python_version: str,
         environment_keys: list[str],
         correlation_id: str | None = None,
-    ) -> None:
-        self._sense(
+    ) -> NeuralEvent | None:
+        return self._sense(
             self.environment,
             {
                 "cwd": cwd,
