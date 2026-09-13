@@ -111,6 +111,7 @@ def test_neural_observer_maps_core_lifecycle_events(monkeypatch):
         "process",
     ]
     assert calls[1][1] is events["environment.observed"]
+    assert calls[1][2] == {"allow_environment": True}
     assert calls[2][1] == "hello"
     assert calls[3][1] is events["conversation.observed"]
     assert calls[4][1] == "task-1"
@@ -132,7 +133,7 @@ def test_neural_observer_maps_core_lifecycle_events(monkeypatch):
 
 def test_neural_observer_does_not_process_missing_observations(monkeypatch):
     class FakeBridge:
-        def observe_conversation(self, **kwargs):
+        def observe_conversation(self, text, **kwargs):
             return None
 
         def process_event(self, *_args, **_kwargs):
