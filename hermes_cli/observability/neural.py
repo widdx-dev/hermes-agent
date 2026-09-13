@@ -7,6 +7,7 @@ import platform as platform_module
 import threading
 from typing import Any, Mapping
 
+from neural.events import NeuralEvent
 from neural.integration import NeuralRuntimeBridge
 
 _LOCK = threading.RLock()
@@ -33,8 +34,18 @@ def _bridge(session_id: str) -> NeuralRuntimeBridge:
         return bridge
 
 
+def _process(bridge: NeuralRuntimeBridge, event: NeuralEvent | None, *, allow_environment: bool = False) -> None:
+    if event is None:
+        return
+    try:
+        bridge.process_event(event, allow_environment=allow_environment)
+    except Exception:
+        # Processing is advisory and must never become an agent failure path.
+        return
+
+
 def observe_lifecycle(hook_name: str, **kwargs: Any) -> None:
-    """Forward supported Hermes lifecycle facts into neural perception.
+    """Forward supported Hermes lifecycle facts into neural perception and processing.
 
     This observer is advisory and fail-open. It never dispatches tools, invokes a
     model, changes approval/security state, or performs network I/O.
@@ -43,13 +54,14 @@ def observe_lifecycle(hook_name: str, **kwargs: Any) -> None:
 
     if hook_name == "on_session_start":
         bridge = _bridge(session_id)
-        bridge.observe_environment(
+        event = bridge.observe_environment(
             cwd=str(kwargs.get("cwd") or os.getcwd()),
             platform=str(kwargs.get("platform") or platform_module.system().lower()),
             python_version=str(kwargs.get("python_version") or platform_module.python_version()),
             environment_keys=list(kwargs.get("environment_keys") or os.environ.keys()),
             correlation_id=str(kwargs.get("turn_id") or "") or None,
         )
+        _process(bridge, event, allow_environment=True)
         return
 
     if hook_name == "pre_llm_call":
@@ -57,10 +69,16 @@ def observe_lifecycle(hook_name: str, **kwargs: Any) -> None:
         user_message = kwargs.get("user_message", "")
         text = user_message if isinstance(user_message, str) else str(user_message)
         correlation_id = str(kwargs.get("turn_id") or kwargs.get("task_id") or "") or None
-        bridge.observe_conversation(text, correlation_id=correlation_id)
+        _process(
+            bridge,
+            bridge.observe_conversation(text, correlation_id=correlation_id),
+        )
         task_id = str(kwargs.get("task_id") or "")
         if task_id:
-            bridge.observe_task(task_id, correlation_id=correlation_id)
+            _process(
+                bridge,
+                bridge.observe_task(task_id, correlation_id=correlation_id),
+            )
         return
 
     if hook_name == "post_tool_call":
@@ -72,21 +90,27 @@ def observe_lifecycle(hook_name: str, **kwargs: Any) -> None:
         result = kwargs.get("result", "")
         result_text = result if isinstance(result, str) else str(result)
         correlation_id = str(kwargs.get("turn_id") or kwargs.get("task_id") or "") or None
-        bridge.observe_tool(
-            tool_name,
-            args,
-            result_text,
-            duration_ms=int(kwargs.get("duration_ms") or 0),
-            correlation_id=correlation_id,
+        _process(
+            bridge,
+            bridge.observe_tool(
+                tool_name,
+                args,
+                result_text,
+                duration_ms=int(kwargs.get("duration_ms") or 0),
+                correlation_id=correlation_id,
+            ),
         )
         error_type = str(kwargs.get("error_type") or "")
         error_message = str(kwargs.get("error_message") or "")
         status = str(kwargs.get("status") or "")
         if status == "error" or error_type or error_message:
-            bridge.observe_error(
-                error_type or "ToolError",
-                error_message or result_text,
-                correlation_id=correlation_id,
+            _process(
+                bridge,
+                bridge.observe_error(
+                    error_type or "ToolError",
+                    error_message or result_text,
+                    correlation_id=correlation_id,
+                ),
             )
         return
 
