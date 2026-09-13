@@ -1,6 +1,6 @@
 import pytest
 
-from neural.events import NeuralEvent
+from neural.events import NeuralEvent, NeuralSignal
 from neural.integration import (
     NeuralRuntimeBridge,
     bind_runtime_bridge,
@@ -95,3 +95,82 @@ def test_bridge_never_executes_tools(monkeypatch: pytest.MonkeyPatch):
     event = bridge.observe_conversation("hello")
 
     assert event.event_type == "conversation.observed"
+
+
+def test_process_event_processes_existing_eligible_event_without_resensing():
+    runtime = NeuralRuntime()
+    bridge = NeuralRuntimeBridge(runtime)
+    event = bridge.observe_conversation("hello", correlation_id="turn-3")
+    processed: list[tuple[NeuralEvent, bool]] = []
+    signal = NeuralSignal(source="test", target="memory", value=0.5)
+
+    def process(observed: NeuralEvent, *, reinforce: bool = False, success: bool = True):
+        processed.append((observed, reinforce))
+        return [signal]
+
+    runtime.process = process  # type: ignore[method-assign]
+
+    result = bridge.process_event(event)
+
+    assert result == [signal]
+    assert processed == [(event, False)]
+
+
+def test_process_event_processes_all_eligible_event_types():
+    bridge = NeuralRuntimeBridge()
+    processed: list[str] = []
+
+    def process(event: NeuralEvent, *, reinforce: bool = False, success: bool = True):
+        processed.append(event.event_type)
+        return []
+
+    bridge.runtime.process = process  # type: ignore[method-assign]
+    events = [
+        NeuralEvent(source="test", event_type=event_type)
+        for event_type in (
+            "conversation.observed",
+            "task.observed",
+            "terminal.observed",
+            "error.observed",
+        )
+    ]
+
+    for event in events:
+        assert bridge.process_event(event) == []
+
+    assert processed == [event.event_type for event in events]
+
+
+def test_process_event_allows_environment_only_when_explicitly_requested():
+    bridge = NeuralRuntimeBridge()
+    event = NeuralEvent(source="test", event_type="environment.observed")
+    processed: list[NeuralEvent] = []
+    bridge.runtime.process = lambda event, **_: processed.append(event) or []  # type: ignore[method-assign]
+
+    assert bridge.process_event(event) == []
+    assert processed == []
+    assert bridge.process_event(event, allow_environment=True) == []
+    assert processed == [event]
+
+
+def test_process_event_ignores_unsupported_event_types():
+    bridge = NeuralRuntimeBridge()
+    event = NeuralEvent(source="test", event_type="unknown.observed")
+    bridge.runtime.process = lambda *_args, **_kwargs: pytest.fail("unsupported event was processed")  # type: ignore[method-assign]
+
+    assert bridge.process_event(event) == []
+
+
+def test_process_event_is_fail_open_and_never_reinforces():
+    bridge = NeuralRuntimeBridge()
+    event = NeuralEvent(source="test", event_type="error.observed")
+    calls: list[tuple[NeuralEvent, bool]] = []
+
+    def fail(event: NeuralEvent, *, reinforce: bool = False, success: bool = True):
+        calls.append((event, reinforce))
+        raise RuntimeError("processor failure")
+
+    bridge.runtime.process = fail  # type: ignore[method-assign]
+
+    assert bridge.process_event(event) == []
+    assert calls == [(event, False)]
