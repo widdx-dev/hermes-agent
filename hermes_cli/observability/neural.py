@@ -9,6 +9,16 @@ from neural.integration import NeuralRuntimeBridge
 
 _LOCK = threading.RLock()
 _BRIDGES: dict[str, NeuralRuntimeBridge] = {}
+_SUPPORTED_HOOKS = frozenset({
+    "on_session_start",
+    "pre_llm_call",
+    "post_tool_call",
+    "on_session_end",
+})
+
+
+def handles_hook(hook_name: str) -> bool:
+    return hook_name in _SUPPORTED_HOOKS
 
 
 def _bridge(session_id: str) -> NeuralRuntimeBridge:
